@@ -77,7 +77,7 @@ function App() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h1 className="text-lg font-semibold tracking-tight">FlowStone</h1>
-              {/* <p className="mt-1 text-xs text-zinc-300">Make a doodle wallpaper.</p> */}
+              <p className="mt-1 text-xs text-zinc-300">by: Miguel Johnson</p>
             </div>
             <div className="flex gap-2">
               <button
