@@ -27,7 +27,10 @@ function App() {
   const [generateToken, setGenerateToken] = useState(1)
   const [saveToken, setSaveToken] = useState(0)
 
+  const STONE_MIN = 1
+  const STONE_MAX = 30
   const [stoneCount, setStoneCount] = useState(9)
+  const [stoneCountText, setStoneCountText] = useState('9')
 
   const [background, setBackground] = useState('#0b0c10')
   const [water, setWater] = useState('#7dd3fc')
@@ -40,6 +43,22 @@ function App() {
   useEffect(() => {
     setGenerateToken((t) => t + 1)
   }, [stoneCount, particleDensity])
+
+  // Keep the text input in sync with programmatic changes.
+  useEffect(() => {
+    setStoneCountText(String(stoneCount))
+  }, [stoneCount])
+
+  function commitStoneCount(nextRaw: string) {
+    const n = Number.parseInt(nextRaw, 10)
+    if (!Number.isFinite(n)) {
+      setStoneCountText(String(stoneCount))
+      return
+    }
+    const next = Math.min(STONE_MAX, Math.max(STONE_MIN, n))
+    setStoneCount(next)
+    setStoneCountText(String(next))
+  }
 
   const canvasDims = useMemo(() => {
     // Fit inside the available box, keep a wallpaper-ish aspect.
@@ -112,11 +131,26 @@ function App() {
             <label className="flex items-center justify-between gap-3 text-sm">
               <span className="whitespace-nowrap text-zinc-200">Stones</span>
               <input
-                type="number"
-                min={1}
-                max={30}
-                value={stoneCount}
-                onChange={(e) => setStoneCount(Number(e.target.value) || 1)}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={stoneCountText}
+                onChange={(e) => {
+                  const next = e.target.value.replace(/\D/g, '').slice(0, 2)
+                  setStoneCountText(next)
+                  // Live-update when it parses.
+                  if (next.length > 0) commitStoneCount(next)
+                }}
+                onBlur={() => {
+                  if (stoneCountText.trim().length === 0) {
+                    setStoneCountText(String(stoneCount))
+                    return
+                  }
+                  commitStoneCount(stoneCountText)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur()
+                }}
                 className="h-9 w-20 rounded border border-zinc-700 bg-zinc-950 px-2 text-sm text-zinc-100"
               />
             </label>
