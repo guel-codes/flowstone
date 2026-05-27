@@ -69,8 +69,7 @@ export function rippleSketch(p: P5CanvasInstance<RippleSketchProps>) {
   let lastSaveToken = 0
   let lastSizeToken = 0
   let lastStoneCount = -1
-  let lastBg = ''
-  let lastWater = ''
+  // (Colors are read directly from props in draw.)
   let lastParticleDensity: RippleSketchProps['particleDensity'] | undefined
   let lastParticleSize: RippleSketchProps['particleSize'] | undefined
 
@@ -89,6 +88,7 @@ export function rippleSketch(p: P5CanvasInstance<RippleSketchProps>) {
   let stoneMaskW = 0
   let stoneMaskH = 0
   let particles: Particle[] = []
+  let desiredParticleCount = 0
   let fieldT = 0
   let edgeMargin = 2
 
@@ -221,14 +221,24 @@ export function rippleSketch(p: P5CanvasInstance<RippleSketchProps>) {
     const density = props?.particleDensity ?? 'med'
     // If performance stays good (pixel-cached collision), allow denser modes.
     const mul = density === 'low' ? 0.85 : density === 'med' ? 1.25 : density === 'high' ? 1.9 : 3.0
-    const target = Math.max(2500, Math.min(42000, Math.floor(base * mul)))
-    const next: Particle[] = []
-    for (let i = 0; i < target; i++) {
-      const pt: Particle = { x: 0, y: 0, vx: 0, vy: 0, age: 0, stuck: 0, slow: 0 }
-      respawnParticle(pt)
-      next.push(pt)
+    desiredParticleCount = Math.max(2500, Math.min(42000, Math.floor(base * mul)))
+  }
+
+  function reconcileParticleCount() {
+    // Avoid big allocations on every settings tweak; converge over a few frames.
+    const target = desiredParticleCount || particles.length
+    if (particles.length > target) {
+      particles.length = target
+      return
     }
-    particles = next
+    if (particles.length < target) {
+      const batch = Math.min(1200, target - particles.length)
+      for (let i = 0; i < batch; i++) {
+        const pt: Particle = { x: 0, y: 0, vx: 0, vy: 0, age: 0, stuck: 0, slow: 0 }
+        respawnParticle(pt)
+        particles.push(pt)
+      }
+    }
   }
 
   function stepParticle(pt: Particle) {
@@ -237,9 +247,10 @@ export function rippleSketch(p: P5CanvasInstance<RippleSketchProps>) {
     // Flow field + a little momentum.
     const n = p.noise(pt.x * 0.0028, pt.y * 0.0028, seed * 0.00001 + fieldT)
     const ang = n * p.TWO_PI * 6
-    // Scale forces by density so higher particle counts don't look chaotic/fast.
-    const density = props?.particleDensity ?? 'med'
-    const forceK = density === 'ultra' ? 0.62 : density === 'high' ? 0.72 : density === 'med' ? 0.82 : 0.92
+    // Keep a consistent (slower, smooth) feel regardless of density.
+    // Density should control particle count, not how fast they move.
+    // This matches the older ultra/high pacing.
+    const forceK = 0.58
 
     let ax = Math.cos(ang) * 0.26 * forceK
     let ay = (Math.sin(ang) * 0.26 + 0.09) * forceK // gentle downward drift for "water flow"
@@ -263,7 +274,7 @@ export function rippleSketch(p: P5CanvasInstance<RippleSketchProps>) {
     pt.vy = pt.vy * 0.97 + ay
 
     // Limit speed so collisions look like ripples, not streaks.
-    const maxV = density === 'ultra' ? 2.1 : density === 'high' ? 2.3 : 2.6
+    const maxV = 2.0
     const sp = Math.hypot(pt.vx, pt.vy)
     if (sp > maxV) {
       pt.vx = (pt.vx / sp) * maxV
@@ -403,13 +414,18 @@ export function rippleSketch(p: P5CanvasInstance<RippleSketchProps>) {
     lastStoneColor = next?.stone ?? '#111827'
     rebuildStoneMask(lastStoneColor)
     reseedParticles()
+    // If this is our first generate (or after resize), quickly populate to target.
+    while (particles.length < desiredParticleCount) reconcileParticleCount()
   }
 
   p.setup = () => {
-    // In React dev (StrictMode) setup can be invoked twice; ensure we don't accumulate canvases.
-    if ((p as unknown as { canvas?: HTMLCanvasElement }).canvas) {
-      ;(p as unknown as { canvas?: HTMLCanvasElement }).canvas?.remove()
+    // Defensive: in dev/HMR it's easy to end up with multiple canvases attached to the same mount.
+    // Clear any existing canvases under the wrapper's mount node before creating ours.
+    const mount = (p as unknown as { _userNode?: HTMLElement })._userNode
+    if (mount) {
+      for (const c of Array.from(mount.querySelectorAll('canvas'))) c.remove()
     }
+    ;(p as unknown as { canvas?: HTMLCanvasElement }).canvas?.remove()
 
     const w = Math.max(240, Math.floor(props?.width ?? 720))
     const h = Math.max(240, Math.floor(props?.height ?? 900))
@@ -426,8 +442,6 @@ export function rippleSketch(p: P5CanvasInstance<RippleSketchProps>) {
     lastGenerateToken = props?.generateToken ?? 0
     lastSaveToken = props?.saveToken ?? 0
     lastSizeToken = props?.sizeToken ?? 0
-    lastBg = props?.background ?? ''
-    lastWater = props?.water ?? ''
     lastParticleDensity = props?.particleDensity
     lastParticleSize = props?.particleSize
     generate(props)
@@ -443,13 +457,7 @@ export function rippleSketch(p: P5CanvasInstance<RippleSketchProps>) {
       resizeIfNeeded(next)
     }
 
-    // When colors change, just record them (we redraw fresh each frame).
-    if (next.background !== lastBg) {
-      lastBg = next.background
-    }
-    if (next.water !== lastWater) {
-      lastWater = next.water
-    }
+    // Colors are applied live in draw; no bookkeeping needed here.
     if (next.stone !== lastStoneColor) {
       lastStoneColor = next.stone
       rebuildStoneMask(next.stone)
@@ -490,7 +498,11 @@ export function rippleSketch(p: P5CanvasInstance<RippleSketchProps>) {
 
     // (mask rebuild handled in updateWithProps; keep draw light)
 
-    p.background(bg)
+    {
+      const rgb = hexToRgb(bg)
+      if (rgb) p.background(rgb.r, rgb.g, rgb.b)
+      else p.background(bg)
+    }
 
     const base = Math.min(p.width, p.height)
     const sz = props?.particleSize ?? 'md'
@@ -499,12 +511,14 @@ export function rippleSketch(p: P5CanvasInstance<RippleSketchProps>) {
     // Keep dots fully inside the box when bouncing.
     edgeMargin = Math.max(2, dot * 0.55)
 
+    reconcileParticleCount()
+
     // No ghosting: draw particles fresh each frame.
     p.noStroke()
     setFillFromHex(p, water, 220)
-    const density = props?.particleDensity ?? 'med'
-    // Extra substeps are only needed at low counts; at high counts they just look "fast".
-    const steps = density === 'low' ? 3 : density === 'med' ? 2 : 1
+    // Keep motion speed consistent across densities.
+    // Use 1 step so we don't accidentally double the perceived speed.
+    const steps = 1
     for (let i = 0; i < particles.length; i++) {
       const pt = particles[i]!
       for (let s = 0; s < steps; s++) stepParticle(pt)

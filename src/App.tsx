@@ -26,7 +26,6 @@ function App() {
   const { ref, size } = useElementSize<HTMLDivElement>()
   const [generateToken, setGenerateToken] = useState(1)
   const [saveToken, setSaveToken] = useState(0)
-  const [settingsToken, setSettingsToken] = useState(1)
 
   const [stoneCount, setStoneCount] = useState(9)
 
@@ -36,11 +35,11 @@ function App() {
   const [particleDensity, setParticleDensity] = useState<'low' | 'med' | 'high' | 'ultra'>('med')
   const [particleSize, setParticleSize] = useState<'xs' | 'sm' | 'md' | 'lg'>('md')
 
-  // Remount p5 only when sim/geometry params change (keeps updates reliable).
+  // When major sim params change, just trigger a regenerate.
+  // (Avoid remounting the sketch; it causes GC/jank with lots of particles.)
   useEffect(() => {
     setGenerateToken((t) => t + 1)
-    setSettingsToken((t) => t + 1)
-  }, [stoneCount, particleDensity, particleSize])
+  }, [stoneCount, particleDensity])
 
   const canvasDims = useMemo(() => {
     // Fit inside the available box, keep a wallpaper-ish aspect.
@@ -53,7 +52,7 @@ function App() {
   }, [size.height, size.width])
 
   return (
-    <div className="min-h-svh bg-zinc-950 text-zinc-100">
+    <div className="min-h-dvh bg-zinc-950 text-zinc-100">
       <div className="mx-auto grid max-w-6xl gap-4 p-4 md:grid-cols-[320px_1fr]">
         <aside className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 md:sticky md:top-4 md:self-start">
           <div className="flex items-start justify-between gap-3">
@@ -153,11 +152,10 @@ function App() {
         <main className="rounded-xl bg-zinc-950 p-2 md:p-4">
           <div
             ref={ref}
-            className="mx-auto grid h-[70svh] w-full max-w-[820px] place-items-center md:h-[calc(100svh-2rem)]"
+            className="mx-auto grid h-[70dvh] w-full max-w-[820px] place-items-center md:h-[calc(100dvh-2rem)]"
           >
             <div className="overflow-hidden rounded-lg" style={{ width: canvasDims.width, height: canvasDims.height }}>
               <P5Canvas
-                key={settingsToken}
                 sketch={rippleSketch}
                 background={background}
                 water={water}

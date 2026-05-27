@@ -9,4 +9,10 @@ body {
 
 body {
   margin: 0;
+  background: rgb(9 9 11); /* zinc-950 */
+  color: rgb(244 244 245); /* zinc-100 */
+}
+
+#root {
+  min-height: 100%;
 }
