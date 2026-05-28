@@ -219,9 +219,10 @@ export function rippleSketch(p: P5CanvasInstance<RippleSketchProps>) {
     // Higher baseline so it reads as "water".
     const base = Math.max(5000, Math.min(18000, Math.floor(area / 320)))
     const density = props?.particleDensity ?? 'med'
-    // If performance stays good (pixel-cached collision), allow denser modes.
-    const mul = density === 'low' ? 0.85 : density === 'med' ? 1.25 : density === 'high' ? 1.9 : 3.0
-    desiredParticleCount = Math.max(2500, Math.min(42000, Math.floor(base * mul)))
+    // Density should control particle *count* only.
+    // Re-map so the old "ultra" amount becomes the new "low", and push "ultra" much higher.
+    const mul = density === 'low' ? 3.0 : density === 'med' ? 4.2 : density === 'high' ? 6.0 : 8.5
+    desiredParticleCount = Math.max(2500, Math.min(90000, Math.floor(base * mul)))
   }
 
   function reconcileParticleCount() {
